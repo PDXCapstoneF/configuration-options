@@ -1,7 +1,8 @@
 """configuration-options.
 
 Usage:
-    main.py --version
+    co --version
+    co translate <file> [(--type=<filetype> | --sniff )]
 
 Options:
     --version   Show version
