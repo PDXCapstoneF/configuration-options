@@ -9,32 +9,91 @@ Options:
 
 """
 
+import os
+
 from docopt import docopt
+from schema import Schema, Optional, Use, And, Or, SchemaError
 
 from strictyaml import load, Map, Str, Int, Seq, YAMLError
 from hjson import loads as hjsonLoads
+from enum import Enum
 
 schema = Map({
-        "name": Str(),
-        "age": Int(),
-})
+    "name": Str(),
+    "age": Int(),
+    })
 
 def loadYaml(possiblyYaml):
     return load(possiblyYaml, schema).data
 
+class Filetype(Enum):
+    UNKNOWN = 1
+    YAML = 2
+    HJSON = 3
 
 loaders = {
-    '.hjson': hjsonLoads,
-    '.yml': loadYaml,
-    '.yaml': loadYaml,
-}
+        Filetype.HJSON: { 
+            'loader': hjsonLoads,
+            'ext': ['.hjson'] 
+            },
+        Filetype.YAML: {
+            'loader': loadYaml,
+            'ext': [ '.yml', '.yaml' ],
+            },
+        Filetype.UNKNOWN: {
+            'loader': lambda: "unknown filetype",
+            'ext': [ '.*' ],
+        },
+    }
+
+def peek(f):
+    pos = f.tell()
+    line = f.readline()
+    f.seek(pos)
+    return line
+
+def sniff(f):
+    line = peek(f)
+
+    if '{' in line:
+        return Filetype.HJSON
+    elif ':' in line:
+        return Filetype.YAML
+    else:
+        return Filetype.UNKNOWN
+
 
 if __name__ == "__main__":
     arguments = docopt(__doc__, version='0.0.1')
-    print(arguments)
-    with open(arguments['<file>']) as f:
-        l = loaders.get(arguments['--type'], lambda x: "blah")
-        try:
-            print(l(f.read()))
-        except Exception as e:
-            print(e)
+
+    argSchema = Schema({
+        '<file>': And(Use(str), Use(open, error='file should be readable')),
+        Optional('--sniff'): Or(None, True),
+        Optional('--type'): Or(None, Use(str)),
+        Optional('translate'): Use(bool),
+        '--version': Or(None, Use(str)),
+        })
+
+    try:
+        arguments = argSchema.validate(arguments)
+    except SchemaError as e:
+        exit(e)
+
+    if arguments['--type'] is not None:
+        for ft, info in loaders.items():
+            if arguments['--type'] in ft.ext:
+                ext = ft
+    else:
+        ext = sniff(arguments['<file>'])
+
+    if ext is Filetype.UNKNOWN:
+        print(loaders.get(ext)['loader']())
+        exit(1)
+
+    f = arguments['<file>']
+    l = loaders.get(ext, lambda: "missing loader")
+
+    try:
+        print(l['loader']((f.read())))
+    except Exception as e:
+        print(e)
