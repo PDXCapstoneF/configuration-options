@@ -10,6 +10,7 @@ Options:
 """
 
 import os
+import json
 
 from docopt import docopt
 from schema import Schema, Optional, Use, And, Or, SchemaError
@@ -18,13 +19,8 @@ from strictyaml import load, Map, Str, Int, Seq, YAMLError
 from hjson import loads as hjsonLoads
 from enum import Enum
 
-schema = Map({
-    "name": Str(),
-    "age": Int(),
-    })
-
 def loadYaml(possiblyYaml):
-    return load(possiblyYaml, schema).data
+    return load(possiblyYaml).data
 
 class Filetype(Enum):
     UNKNOWN = 1
@@ -66,7 +62,7 @@ def sniff(f):
 if __name__ == "__main__":
     arguments = docopt(__doc__, version='0.0.1')
 
-    argSchema = Schema({
+    schema = Schema({
         '<file>': And(Use(str), Use(open, error='file should be readable')),
         Optional('--sniff'): Or(None, True),
         Optional('--type'): Or(None, Use(str)),
@@ -75,7 +71,7 @@ if __name__ == "__main__":
         })
 
     try:
-        arguments = argSchema.validate(arguments)
+        arguments = schema.validate(arguments)
     except SchemaError as e:
         exit(e)
 
@@ -94,6 +90,7 @@ if __name__ == "__main__":
     l = loaders.get(ext, lambda: "missing loader")
 
     try:
-        print(l['loader']((f.read())))
+        v = l['loader']((f.read()))
+        print(json.dumps(v))
     except Exception as e:
         print(e)
